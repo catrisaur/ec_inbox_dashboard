@@ -6,34 +6,41 @@ import numpy as np
 from datetime import datetime
 
 # ============================================
-# Placeholder Data Generation
+# Data Generation (Cached for Performance)
 # ============================================
-np.random.seed(42)
-dates = pd.date_range(start="2025-01-01", end="2025-12-31", freq="D")
-sample_size = 500
-random_dates = np.random.choice(dates, sample_size)
-categories = ["ABAC", "COI", "Data Protection", "IPT", "Sanctions"]
-sub_categories = ["ISO 37001", "Gifts & Entertainment", "COI Declaration", "Data Breach", "IPT Policies"]
-chatbot_flags = np.random.choice(["Yes", "No"], sample_size, p=[0.4, 0.6])
+@st.cache_data
+def generate_data():
+    np.random.seed(42)
+    dates = pd.date_range(start="2025-01-01", end="2025-12-31", freq="D")
+    sample_size = 500
+    random_dates = np.random.choice(dates, sample_size)
+    categories = ["ABAC", "COI", "Data Protection", "IPT", "Sanctions"]
+    sub_categories = ["ISO 37001", "Gifts & Entertainment", "COI Declaration", "Data Breach", "IPT Policies"]
+    chatbot_flags = np.random.choice(["Yes", "No"], sample_size, p=[0.4, 0.6])
 
-df = pd.DataFrame({
-    "DateTimeReceived": random_dates,
-    "Category": np.random.choice(categories, sample_size),
-    "Sub-Category": np.random.choice(sub_categories, sample_size),
-    "Chatbot_Addressable": chatbot_flags
-})
+    df = pd.DataFrame({
+        "DateTimeReceived": random_dates,
+        "Category": np.random.choice(categories, sample_size),
+        "Sub-Category": np.random.choice(sub_categories, sample_size),
+        "Chatbot_Addressable": chatbot_flags
+    })
+    return df.sort_values("DateTimeReceived")
+
+df = generate_data()
 
 # ============================================
 # Sidebar Filters
 # ============================================
 st.sidebar.header("Filters")
+categories = df["Category"].unique().tolist()
 selected_categories = st.sidebar.multiselect("Select Categories", categories)
 date_range = st.sidebar.date_input("Select Date Range", [df["DateTimeReceived"].min(), df["DateTimeReceived"].max()])
 
-filtered_df = df[
-    (df["DateTimeReceived"].between(pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1]))) &
-    (df["Category"].isin(selected_categories) if selected_categories else True)
-]
+filtered_df = df.query(
+    "DateTimeReceived >= @date_range[0] and DateTimeReceived <= @date_range[1]"
+)
+if selected_categories:
+    filtered_df = filtered_df.query("Category in @selected_categories")
 
 # ============================================
 # KPI Calculations
@@ -56,11 +63,13 @@ st.title("📊 Email Operations Dashboard")
 
 # KPI Cards
 st.subheader("Key Metrics")
-col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+col1, col2, col3, col4 = st.columns(4)
 col1.metric("Total YTD", total_ytd)
 col2.metric("Total MTD", total_mtd)
 col3.metric("Total WTD", total_wtd)
 col4.metric("Today", total_today)
+
+col5, col6, col7 = st.columns(3)
 col5.metric("Chatbot %", f"{pct_chatbot:.1f}%")
 col6.metric("Hours Saved", f"{time_saved_hours:.2f}")
 col7.metric("FTE Saved", f"{fte_saved:.2f}")
